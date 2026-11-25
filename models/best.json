@@ -1,0 +1,4 @@
+{
+  "overall": "dqn",
+  "models": {"dqn": {"path": "models/dqn/dqn_ddqn_s0.pt"}}
+}
