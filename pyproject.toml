@@ -1,0 +1,24 @@
+[project]
+name = "ivan-manzi-rl-summative"
+version = "0.1.0"
+description = "Medical delivery drone RL (MuJoCo + TorchRL)"
+requires-python = ">=3.10,<3.14"
+dependencies = [
+    "numpy>=1.26",
+    "torch>=2.5",
+    "tensordict>=0.7",
+    "torchrl>=0.7",
+    "gymnasium>=1.0",
+    "mujoco>=3.2",
+    "matplotlib>=3.8",
+    "pandas>=2.0",
+    "imageio>=2.34",
+    "tabulate>=0.9",
+    "pillow>=10.0",
+]
+[dependency-groups]
+dev = ["pytest>=8.0"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
