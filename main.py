@@ -1,6 +1,6 @@
 """Entry point for the medical-delivery-drone RL project.
 
-    uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME]
+    uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME] [--cfg KEY=VALUE ...]
     uv run main.py play  [--algo best|dqn|reinforce|ppo|a2c|scripted|random] [--episodes 3] [--split train|heldout|stress]
                          [--headless] [--fps 10] [--follow] [--snapshot]
 
@@ -96,16 +96,24 @@ def play(algo: str = "best", episodes: int = 3, headless: bool = False, split: s
         env.close()
 
 
-def train(algo: str, frames: int | None, seed: int, run_id: str | None) -> None:
+def train(algo: str, frames: int | None, seed: int, run_id: str | None, overrides: list[str]) -> None:
+    import json
     from training import TOTAL_FRAMES
+    cfg = {}
+    for item in overrides:                      # --cfg key=value (value parsed as JSON, else kept as text)
+        key, _, val = item.partition("=")
+        try:
+            cfg[key] = json.loads(val)
+        except json.JSONDecodeError:
+            cfg[key] = val
     frames = frames or TOTAL_FRAMES
     run_id = run_id or f"manual{seed}"
     if algo == "dqn":
         from training.dqn_training import train_dqn
-        summary = train_dqn({}, run_id, seed=seed, total_frames=frames, verbose=True)
+        summary = train_dqn(cfg, run_id, seed=seed, total_frames=frames, verbose=True)
     else:
         from training.pg_training import train_pg
-        summary = train_pg(algo, {}, run_id, seed=seed, total_frames=frames, verbose=True)
+        summary = train_pg(algo, cfg, run_id, seed=seed, total_frames=frames, verbose=True)
     print(f"\nSaved model: {summary.get('model_path')}   curve: logs/curves/{algo}_{run_id}.csv")
     for split, e in summary["final_eval"].items():
         print(f"{split:<8} return {e['return_mean']:+.2f}  delivered {e['success_rate']:.0%}  crashed {e['crash_rate']:.0%}")
@@ -120,6 +128,8 @@ def main() -> None:
     tr.add_argument("--frames", type=int, default=None, help="environment-interaction budget (default 150000)")
     tr.add_argument("--seed", type=int, default=0)
     tr.add_argument("--run-id", default=None)
+    tr.add_argument("--cfg", action="append", default=[], metavar="KEY=VALUE",
+                    help="override a hyperparameter, e.g. --cfg double_dqn=true --cfg eps_anneal_frames=100000")
 
     pl = sub.add_parser("play", help="replay an agent (live window or GIF)")
     pl.add_argument("--algo", default="best", choices=["best", "dqn", "reinforce", "ppo", "a2c", "scripted", "random"])
@@ -133,7 +143,7 @@ def main() -> None:
     a = ap.parse_args()
 
     if a.cmd == "train":
-        train(a.algo, a.frames, a.seed, a.run_id)
+        train(a.algo, a.frames, a.seed, a.run_id, a.cfg)
     else:
         play(a.algo, a.episodes, a.headless, a.split, a.seed, a.fps, a.follow, a.snapshot)
 
