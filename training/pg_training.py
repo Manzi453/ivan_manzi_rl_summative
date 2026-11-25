@@ -19,7 +19,7 @@ from torchrl.objectives.value import GAE
 from torchrl.objectives.value.functional import reward2go
 
 from environment.custom_env import N_ACTIONS
-from training.common import (EVAL_EVERY, ROOT, TOTAL_FRAMES, EpisodeTracker, RunLogger, build_mlp,
+from training import (EVAL_EVERY, ROOT, TOTAL_FRAMES, EpisodeTracker, RunLogger, build_mlp,
                              evaluate, full_evaluation, make_env, save_summary, seed_everything)
 
 DEFAULTS = {

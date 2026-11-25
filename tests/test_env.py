@@ -1,9 +1,8 @@
 import numpy as np
 import pytest
 
-from environment.baselines import evaluate, scripted_policy
 from environment.custom_env import (ACTION_NAMES, CLIMB, HOLD, OBS_DIM, PAD_RADIUS, RELEASE, SPLITS, DeliveryDroneEnv,
-                                    make_layout)
+                                    evaluate_policy, make_layout, scripted_policy)
 
 
 def test_spaces_and_obs_range():
@@ -136,7 +135,7 @@ def test_splits_do_not_overlap_and_layouts_valid():
 
 
 def test_scripted_baseline_solves_task():
-    res = evaluate(lambda e: scripted_policy(), DeliveryDroneEnv(), episodes=20, seed=100)
+    res = evaluate_policy(lambda e: scripted_policy(), DeliveryDroneEnv(), episodes=20, seed=100)
     assert res["outcomes"].get("delivered", 0) >= 14           # task is solvable from observations alone
 
 

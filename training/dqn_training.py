@@ -16,7 +16,7 @@ from torchrl.modules import EGreedyModule, QValueActor
 from torchrl.objectives import DQNLoss, HardUpdate, SoftUpdate
 
 from environment.custom_env import N_ACTIONS
-from training.common import (EVAL_EVERY, ROOT, TOTAL_FRAMES, EpisodeTracker, RunLogger, build_mlp,
+from training import (EVAL_EVERY, ROOT, TOTAL_FRAMES, EpisodeTracker, RunLogger, build_mlp,
                              evaluate, full_evaluation, make_env, save_summary, seed_everything)
 
 DEFAULTS = dict(
