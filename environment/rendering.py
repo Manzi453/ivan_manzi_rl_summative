@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 """MuJoCo scene (MJCF) and rendering; rays only hit geom group 0 (floor + obstacles)."""
 from __future__ import annotations
 

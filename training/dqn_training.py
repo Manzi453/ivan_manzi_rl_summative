@@ -43,6 +43,9 @@ def train_dqn(cfg: dict, run_id: str, seed: int = 0, total_frames: int = TOTAL_F
                             annealing_num_steps=c["eps_anneal_frames"])
     explore_policy = TensorDictSequential(qvalue, egreedy)
 
+    def eps() -> float:
+        return float(getattr(egreedy, "eps"))
+
     loss_mod = DQNLoss(qvalue, action_space=env.action_spec, loss_function=c["loss_fn"],
                        double_dqn=c["double_dqn"], delay_value=True)
     loss_mod.make_value_estimator(gamma=c["gamma"])
@@ -53,7 +56,7 @@ def train_dqn(cfg: dict, run_id: str, seed: int = 0, total_frames: int = TOTAL_F
     optim = torch.optim.Adam(loss_mod.parameters(), lr=c["lr"])
     rb = ReplayBuffer(storage=LazyTensorStorage(c["buffer_size"]))
 
-    collector = Collector(lambda: make_env(seed), explore_policy, frames_per_batch=c["frames_per_batch"],
+    collector = Collector(make_env(seed), explore_policy, frames_per_batch=c["frames_per_batch"],
                           total_frames=total_frames, init_random_frames=c["init_random_frames"])
     logger = RunLogger("dqn", run_id)
     tracker = EpisodeTracker()
@@ -67,6 +70,7 @@ def train_dqn(cfg: dict, run_id: str, seed: int = 0, total_frames: int = TOTAL_F
         tracker.update(batch)
         rb.extend(batch.reshape(-1).cpu())
         if frames >= c["init_random_frames"]:
+            sample = None
             for _ in range(c["utd"]):
                 sample = rb.sample(c["batch_size"])
                 lv = loss_mod(sample)
@@ -76,8 +80,9 @@ def train_dqn(cfg: dict, run_id: str, seed: int = 0, total_frames: int = TOTAL_F
                 optim.step()
                 target_updater.step()
                 losses.append(float(lv["loss"].detach()))
-            with torch.no_grad():
-                qmeans.append(float(qnet(sample["observation"]).max(-1).values.mean()))
+            if sample is not None:
+                with torch.no_grad():
+                    qmeans.append(float(qnet(sample["observation"]).max(-1).values.mean()))
         egreedy.step(n)
         collector.update_policy_weights_()
         if frames >= next_eval or frames >= total_frames:
@@ -87,15 +92,15 @@ def train_dqn(cfg: dict, run_id: str, seed: int = 0, total_frames: int = TOTAL_F
             logger.log(frames=frames, train_return=tracker.mean, eval_return=eval_ret, eval_success=eval_succ,
                        loss=float(np.mean(losses[-200:])) if losses else float("nan"),
                        loss_objective=float(np.mean(losses[-200:])) if losses else float("nan"),
-                       epsilon=float(egreedy.eps), q_mean=float(np.mean(qmeans[-50:])) if qmeans else float("nan"))
+                       epsilon=eps(), q_mean=float(np.mean(qmeans[-50:])) if qmeans else float("nan"))
             if verbose:
                 print(f"[dqn {run_id}] frames={frames} train={tracker.mean:.2f} eval={eval_ret:.2f} succ={eval_succ:.2f} "
-                      f"loss={np.mean(losses[-200:]):.4f} eps={float(egreedy.eps):.2f}")
+                      f"loss={np.mean(losses[-200:]):.4f} eps={eps():.2f}")
         elif frames % (EVAL_EVERY // 6) < n:
             logger.log(frames=frames, train_return=tracker.mean,
                        loss=float(np.mean(losses[-200:])) if losses else float("nan"),
                        loss_objective=float(np.mean(losses[-200:])) if losses else float("nan"),
-                       epsilon=float(egreedy.eps), q_mean=float(np.mean(qmeans[-50:])) if qmeans else float("nan"))
+                       epsilon=eps(), q_mean=float(np.mean(qmeans[-50:])) if qmeans else float("nan"))
         if frames >= total_frames:
             break
     collector.shutdown()

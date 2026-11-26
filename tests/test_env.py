@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+from gymnasium.spaces import Discrete
 
 from environment.custom_env import (ACTION_NAMES, CLIMB, HOLD, OBS_DIM, PAD_RADIUS, RELEASE, SPLITS, DeliveryDroneEnv,
                                     evaluate_policy, make_layout, scripted_policy)
@@ -7,7 +8,7 @@ from environment.custom_env import (ACTION_NAMES, CLIMB, HOLD, OBS_DIM, PAD_RADI
 
 def test_spaces_and_obs_range():
     env = DeliveryDroneEnv()
-    assert env.action_space.n == 8 == len(ACTION_NAMES)
+    assert isinstance(env.action_space, Discrete) and env.action_space.n == 8 == len(ACTION_NAMES)
     obs, info = env.reset(seed=0)
     assert obs.shape == (OBS_DIM,) and obs.dtype == np.float32
     for _ in range(30):
@@ -90,7 +91,7 @@ def test_crash_into_obstacle():
     env.data.qpos[:3] = (ox - rad - 0.35, oy, min(h / 2, 1.0))
     env.data.qpos[3] = 0.0
     env.fwd_cmd = 2.0
-    out = None
+    out, r = None, 0.0
     for _ in range(20):
         _, r, te, tr, info = env.step(HOLD)
         if te:
@@ -118,6 +119,7 @@ def test_battery_geofence_timeout():
     assert out == "left_geofence"
     env2 = DeliveryDroneEnv(max_steps=5)
     env2.reset(seed=6)
+    tr, info = False, {}
     for _ in range(5):
         _, r, te, tr, info = env2.step(HOLD)
     assert tr and info["outcome"] == "timeout"
@@ -153,5 +155,6 @@ def test_render_rgb_array():
     env = DeliveryDroneEnv(render_mode="rgb_array", width=320, height=240)
     env.reset(seed=0)
     f = env.render()
+    assert f is not None
     assert f.shape == (240, 320, 3) and f.dtype == np.uint8 and f.std() > 5
     env.close()

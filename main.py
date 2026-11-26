@@ -60,7 +60,7 @@ def play(algo: str = "best", episodes: int = 3, headless: bool = False, split: s
                     if info["steps"] % 2 == 0 or done:
                         frames.append(env.render(status=True))
                 else:
-                    if not env._renderer.viewer_running():
+                    if not env.viewer_running():
                         print("window closed - stopping")
                         return
                     time.sleep(max(0.0, 1.0 / fps - (time.time() - t0)))

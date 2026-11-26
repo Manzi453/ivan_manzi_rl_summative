@@ -1,3 +1,4 @@
+# pyright: reportAttributeAccessIssue=false
 """DeliveryDrone-v0: MuJoCo drone that has to drop a medical parcel on a clinic pad (details in README)."""
 from __future__ import annotations
 
@@ -70,6 +71,7 @@ WIND_MAX = {"train": 1.5, "heldout": 1.5, "stress": 3.0}
 def make_layout(layout_id: int, n_obstacles: int) -> dict[str, Any]:
     """hub, pad and obstacles for a layout id (same id -> same map)"""
     rng = np.random.default_rng(layout_id)
+    hub = pad = np.zeros(2)
     for _ in range(200):
         hub = rng.uniform(-4.8, 4.8, 2)
         ang = rng.uniform(0, 2 * math.pi)
@@ -413,6 +415,9 @@ class DeliveryDroneEnv(gym.Env):
                 f"distance to pad {self._pad_distance():.2f} m",
             ])
         return frame
+
+    def viewer_running(self) -> bool:
+        return self._renderer is None or self._renderer.viewer_running()
 
     def set_camera(self, name: str):
         self._cam = (name, self._cam[1], self._cam[2])

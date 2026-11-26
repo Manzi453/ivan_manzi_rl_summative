@@ -13,7 +13,7 @@ from typing import Callable
 import numpy as np
 import torch
 from torch import nn
-from torchrl.envs import Compose, GymWrapper, RewardSum, TransformedEnv
+from torchrl.envs import GymWrapper, RewardSum, TransformedEnv
 from torchrl.modules import MLP
 
 from environment.custom_env import N_ACTIONS, OBS_DIM, DeliveryDroneEnv
@@ -37,8 +37,7 @@ def seed_everything(seed: int) -> None:
 
 def make_env(seed: int = 0) -> TransformedEnv:
     """env wrapped for torchrl (train layouts only)"""
-    env = TransformedEnv(GymWrapper(DeliveryDroneEnv(split="train"), categorical_action_encoding=True),
-                         Compose(RewardSum()))
+    env = TransformedEnv(GymWrapper(DeliveryDroneEnv(split="train"), categorical_action_encoding=True), RewardSum())
     env.set_seed(seed)
     return env
 
@@ -145,23 +144,25 @@ class EpisodeTracker:
 
 
 # ---- loading saved agents ----
-def load_policy(path: str | Path):
+class Policy:
+    def __init__(self, net: nn.Module, algo: str):
+        self.net, self.algo = net, algo
+
+    def __call__(self, obs: np.ndarray) -> int:
+        with torch.no_grad():
+            return int(self.net(torch.as_tensor(obs, dtype=torch.float32)).argmax().item())
+
+    def scores(self, obs: np.ndarray) -> list[float]:
+        with torch.no_grad():
+            return self.net(torch.as_tensor(obs, dtype=torch.float32)).tolist()
+
+
+def load_policy(path: str | Path) -> Policy:
     ckpt = torch.load(Path(path), map_location="cpu", weights_only=False)
     net = build_mlp(N_ACTIONS, ckpt["hidden"], ckpt["activation"])
     net.load_state_dict(ckpt["state_dict"])
     net.eval()
-
-    def act(obs: np.ndarray) -> int:
-        with torch.no_grad():
-            return int(net(torch.as_tensor(obs, dtype=torch.float32)).argmax().item())
-
-    def scores(obs: np.ndarray) -> list[float]:
-        with torch.no_grad():
-            return net(torch.as_tensor(obs, dtype=torch.float32)).tolist()
-
-    act.scores = scores
-    act.algo = ckpt["algo"]
-    return act
+    return Policy(net, ckpt["algo"])
 
 
 def best_model_path(algo: str | None = None) -> Path:
@@ -275,8 +276,8 @@ def _curve(algo: str, run_id: str):
 
 def frames_to_converge(algo: str, run_id: str) -> float:
     c = _curve(algo, run_id).dropna(subset=["eval_return"])
-    hit = c[c["eval_return"] >= CONVERGENCE_RETURN]
-    return float(hit["frames"].iloc[0]) if len(hit) else float("nan")
+    hits = c["frames"].to_numpy()[c["eval_return"].to_numpy() >= CONVERGENCE_RETURN]
+    return float(hits[0]) if len(hits) else float("nan")
 
 
 def _hp_text(r: dict) -> str:
@@ -316,7 +317,7 @@ def analyze() -> None:
     df.to_csv(tdir / "sweep_all.csv", index=False)
     for a in ALGOS:
         d = df[df.algo == a]
-        lines = [f"### {ALGO_LABEL[a]}: {len(d)} configurations ({int(d.frames.max()):,} frames each, seed 0)", "",
+        lines = [f"### {ALGO_LABEL[a]}: {len(d)} configurations ({int(np.max(d['frames'])):,} frames each, seed 0)", "",
                  "| Run | Hyperparameters | Train return | Delivered (train) | Delivered (held-out) | Delivered (stress) | Frames to converge |",
                  "|---|---|---|---|---|---|---|"]
         for _, x in d.iterrows():
@@ -369,7 +370,7 @@ def analyze() -> None:
 
     fig, ax = plt.subplots(figsize=(10, 3.8))
     w = 0.2
-    nmax = int(df.groupby('algo').size().max())
+    nmax = int(df.groupby('algo').size().to_numpy().max())
     for k, a in enumerate(ALGOS):
         d = df[df.algo == a]
         vals = d.frames_to_converge.fillna(0).to_numpy() / 1000

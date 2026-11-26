@@ -66,11 +66,13 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
     actor_net, actor, critic = _build_actor_critic(env, c, need_critic=(algo != "reinforce" or use_value_baseline))
 
     if algo == "ppo":
+        assert critic is not None
         adv_mod = GAE(gamma=c["gamma"], lmbda=c["lmbda"], value_network=critic, average_gae=True)
         loss_mod = ClipPPOLoss(actor, critic, clip_epsilon=c["clip_epsilon"], entropy_coeff=c["entropy_coef"],
                                critic_coeff=c["critic_coef"], loss_critic_type="smooth_l1", normalize_advantage=False)
         params = loss_mod.parameters()
     elif algo == "a2c":
+        assert critic is not None
         adv_mod = GAE(gamma=c["gamma"], lmbda=c["lmbda"], value_network=critic, average_gae=True)
         loss_mod = A2CLoss(actor, critic, entropy_coeff=c["entropy_coef"], critic_coeff=c["critic_coef"],
                            loss_critic_type="smooth_l1")
@@ -79,9 +81,9 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
         adv_mod = loss_mod = None
         params = actor.parameters()
     optim = torch.optim.Adam(params, lr=c["lr"])
-    critic_optim = torch.optim.Adam(critic.parameters(), lr=c["critic_lr"]) if use_value_baseline else None
+    critic_optim = torch.optim.Adam(critic.parameters(), lr=c["critic_lr"]) if use_value_baseline and critic is not None else None
 
-    collector = Collector(lambda: make_env(seed), actor, frames_per_batch=c["frames_per_batch"],
+    collector = Collector(make_env(seed), actor, frames_per_batch=c["frames_per_batch"],
                           total_frames=total_frames)
     logger = RunLogger(algo, run_id)
     tracker = EpisodeTracker()
@@ -105,6 +107,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             with torch.no_grad():
                 g_raw = reward2go(b["next", "reward"], b["next", "done"], c["gamma"], time_dim=-2).reshape(-1)
                 if c["baseline"] == "value":
+                    assert critic is not None
                     g = g_raw - critic(b.clone(False))["state_value"].reshape(-1)
                 elif c["baseline"] == "batch_mean":
                     g = g_raw - g_raw.mean()
@@ -123,6 +126,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             optim.step()
             crit_val = float("nan")
             if use_value_baseline:
+                assert critic is not None and critic_optim is not None
                 v = critic(b.clone(False))["state_value"].reshape(-1)
                 critic_loss = torch.nn.functional.mse_loss(v, g_raw)
                 critic_optim.zero_grad()
@@ -132,10 +136,11 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             stats["loss"].append(float(loss.detach())); stats["obj"].append(float(loss_obj.detach()))
             stats["crit"].append(crit_val); stats["ent"].append(float(entropy.detach()))
         elif algo == "a2c":
+            assert adv_mod is not None and loss_mod is not None
             with torch.no_grad():
                 adv_mod(batch)
             lv = loss_mod(batch)
-            loss = sum(v for k, v in lv.items() if k.startswith("loss_"))
+            loss = torch.stack([lv[k] for k in lv.keys() if str(k).startswith("loss_")]).sum()
             optim.zero_grad()
             loss.backward()
             torch.nn.utils.clip_grad_norm_(loss_mod.parameters(), c["max_grad_norm"])
@@ -143,6 +148,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             stats["loss"].append(float(loss.detach())); stats["obj"].append(float(lv["loss_objective"].detach()))
             stats["crit"].append(float(lv["loss_critic"].detach())); stats["ent"].append(_entropy(lv, actor, batch))
         else:
+            assert adv_mod is not None and loss_mod is not None
             with torch.no_grad():
                 adv_mod(batch)
             data = batch.reshape(-1)
@@ -150,7 +156,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
                 perm = torch.randperm(data.numel())
                 for chunk in perm.split(c["minibatch"]):
                     lv = loss_mod(data[chunk])
-                    loss = sum(v for k, v in lv.items() if k.startswith("loss_"))
+                    loss = torch.stack([lv[k] for k in lv.keys() if str(k).startswith("loss_")]).sum()
                     optim.zero_grad()
                     loss.backward()
                     torch.nn.utils.clip_grad_norm_(loss_mod.parameters(), c["max_grad_norm"])
