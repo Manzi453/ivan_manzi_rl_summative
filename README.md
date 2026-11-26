@@ -7,7 +7,12 @@ leaving the geofence or running out of battery. Rwanda already runs this kind of
 Four agents are trained on the same custom Gymnasium environment with TorchRL: **DQN** (value-based) and
 **REINFORCE, PPO, A2C** (policy-gradient), each with a hyperparameter sweep of at least 10 configurations.
 
-![environment](assets/env_preview.png)
+<p align="center">
+  <img src="assets/demo_ppo_overview.gif" width="49%" alt="PPO agent delivering three parcels, overview camera">
+  <img src="assets/demo_ppo_chase.gif" width="49%" alt="PPO agent delivering a parcel, chase camera">
+</p>
+<p align="center"><em>The trained PPO agent: three deliveries on training layouts (left) and a chase-camera view of one
+flight (right). It steers around the obstacles at 0.5 m, brakes before the pad and drops the parcel.</em></p>
 
 ## Quick start (uv only)
 
@@ -55,6 +60,8 @@ uv run pytest                   # 14 environment tests
 ```
 
 ## Environment: `DeliveryDrone-v0`
+
+![environment](assets/env_preview.png)
 
 **Link to my mission.** Drone delivery of medical supplies is already a real thing in Rwanda. You want to deliver fast,
 but a rushed drop can destroy the parcel, so the drone has to balance speed against safety.
