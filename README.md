@@ -55,7 +55,6 @@ uv run pytest                   # 14 environment tests
 │   └── pg/                 # REINFORCE / PPO / A2C checkpoints; models/best.json names the best of each
 ├── logs/                   # curves/*.csv (per run), runs.jsonl (final evaluations), tables/sweep_all.csv
 ├── assets/                 # environment preview, demo GIFs, report figures (fig_*.png)
-├── report/                 # final report on the ALU template (.docx + .pdf) and video script
 └── tests/                  # pytest suite for the environment
 ```
 
@@ -166,7 +165,7 @@ training-layout episodes every 10,000 frames during training).
 
 Sweep: 10 configurations for DQN, PPO and A2C and 13 for REINFORCE (3 added after the first 10 all failed), all with
 300,000 frames and seed 0. Every hyperparameter and result is in [`logs/tables/sweep_all.csv`](logs/tables/sweep_all.csv),
-and the full tables with discussion are in the report (`report/`). The best run of each algorithm is picked by its greedy
+and the full tables with discussion are in the submitted report. The best run of each algorithm is picked by its greedy
 return on the training layouts and recorded in `models/best.json`.
 
 | Algorithm | Best run | Train return | Delivered: train / held-out / stress | Crashed (train) |
