@@ -1,0 +1,5 @@
+frames,train_return,eval_return,eval_success,loss,loss_objective,loss_critic,entropy,epsilon,q_mean,time_s
+512,-6.24866,,,-10.2677,-10.247,nan,2.07225,,,0.7
+1024,-6.52854,,,-12.8853,-12.8646,nan,2.07353,,,1.7
+1536,-6.53616,,,-12.3372,-12.3165,nan,2.07362,,,2.4
+2048,-6.89414,,,-13.5452,-13.5245,nan,2.07335,,,3.4
