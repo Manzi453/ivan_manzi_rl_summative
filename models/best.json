@@ -2,16 +2,16 @@
   "overall": "ppo",
   "models": {
     "dqn": {
-      "path": "models/dqn/dqn_cfg01.pt",
-      "run": "cfg01"
+      "path": "models/dqn/dqn_cfg05.pt",
+      "run": "cfg05"
     },
     "reinforce": {
-      "path": "models/pg/reinforce_cfg13.pt",
-      "run": "cfg13"
+      "path": "models/pg/reinforce_cfg08.pt",
+      "run": "cfg08"
     },
     "ppo": {
-      "path": "models/pg/ppo_cfg06.pt",
-      "run": "cfg06"
+      "path": "models/pg/ppo_cfg09.pt",
+      "run": "cfg09"
     },
     "a2c": {
       "path": "models/pg/a2c_cfg07.pt",
