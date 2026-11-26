@@ -16,7 +16,7 @@ git clone https://github.com/Manzi453/ivan_manzi_rl_summative- && cd ivan_manzi_
 uv sync
 uv run main.py                  # results table + replay of the best agent (terminal log, GIF saved to assets/)
 uv run mjpython main.py play    # live MuJoCo window of the best agent (macOS needs mjpython; Linux/Windows: uv run main.py play)
-uv run pytest                   # 13 environment tests
+uv run pytest                   # 14 environment tests
 ```
 
 | Command | What it does |
@@ -42,14 +42,15 @@ uv run pytest                   # 13 environment tests
 │   ├── custom_env.py       # DeliveryDroneEnv, reward, to_json(), random + scripted reference policies
 │   └── rendering.py        # MuJoCo scene (MJCF), off-screen frames and the live window
 ├── training/
-│   ├── __init__.py         # shared helpers, evaluation, logging, SWEEPS (the 40 configurations), analyze()
+│   ├── __init__.py         # shared helpers, evaluation, logging, SWEEPS (the 43 configurations), analyze()
 │   ├── dqn_training.py     # DQN / Double DQN
 │   └── pg_training.py      # REINFORCE, PPO, A2C
 ├── models/
 │   ├── dqn/                # DQN checkpoints (dqn_cfgNN.pt)
 │   └── pg/                 # REINFORCE / PPO / A2C checkpoints; models/best.json names the best of each
-├── logs/                   # curves/*.csv (per run), runs.jsonl (final evaluations), tables/*.md
+├── logs/                   # curves/*.csv (per run), runs.jsonl (final evaluations), tables/sweep_all.csv
 ├── assets/                 # environment preview, demo GIFs, report figures (fig_*.png)
+├── report/                 # final report (.docx + .pdf) and video script
 └── tests/                  # pytest suite for the environment
 ```
 
@@ -157,16 +158,17 @@ training-layout episodes every 10,000 frames during training).
 ## Results
 
 Sweep: 10 configurations for DQN, PPO and A2C and 13 for REINFORCE (3 added after the first 10 all failed), all with
-300,000 frames and seed 0. Full tables with every hyperparameter: [`logs/tables/`](logs/tables) (`sweep_dqn.md`,
-`sweep_reinforce.md`, `sweep_ppo.md`, `sweep_a2c.md`, `sweep_all.csv`). The best run of each algorithm is picked by
-its greedy return on the training layouts and recorded in `models/best.json`.
+300,000 frames and seed 0. Every hyperparameter and result is in [`logs/tables/sweep_all.csv`](logs/tables/sweep_all.csv),
+and the full tables with discussion are in the report (`report/`). The best run of each algorithm is picked by its greedy
+return on the training layouts and recorded in `models/best.json`.
 
 | Algorithm | Best run | Train return | Delivered: train / held-out / stress | Crashed (train) |
 |---|---|---|---|---|
-| PPO | cfg06 | +11.25 | 87% / 84% / 70% | 11% |
-| DQN | cfg01 | +9.87 | 77% / 79% / 51% | 19% |
-| A2C | cfg07 | +9.31 | 77% / 72% / 51% | 15% |
-| REINFORCE | cfg13 | -1.59 | 0% / 0% / 0% | 1% |
+| PPO | cfg09 | +12.19 | 92% / 87% / 82% | 8% |
+| A2C | cfg07 | +11.65 | 92% / 88% / 80% | 8% |
+| DQN | cfg05 | +11.07 | 85% / 90% / 73% | 11% |
+| REINFORCE | cfg08 | -1.35 | 0% / 0% / 0% | 8% |
+| Scripted controller (reference) | - | +11.69 | 95% / 95% / 56% | 0% |
 
 Delivered = share of 100 greedy episodes that ended with a soft release over the pad. Held-out and stress layouts were never used for training or model selection.
 
@@ -178,30 +180,25 @@ Delivered = share of 100 greedy episodes that ended with a soft release over the
 
 ### What the sweeps show
 
-- **PPO was the most robust and the fastest.** 9 of 10 configurations deliver 77-87% of parcels, and the best ones reach a
-  greedy return of +5 after only 81,000 to 90,000 frames (DQN and A2C need about 180,000). The one failure is an entropy
-  bonus of 0.05 (cfg07), which keeps the policy close to random. Clip range (0.1 to 0.3) and batch size barely matter; a lower
-  learning rate (1e-4) is slower and weaker.
-- **DQN learns but is unstable.** Its evaluation return jumps between checkpoints (see the reward figure) and it is sensitive
-  to three settings: learning rate 3e-4 (1% delivered), a hard target update every 500 steps (14%) and a 100k replay buffer (3%).
-  Double DQN configurations (cfg02, cfg03, cfg05) generalize better to held-out and stress layouts (up to 86% and 67%) than the plain
-  DQN with the best training score (cfg01: 79% and 51%).
-- **A2C works but is sensitive to step size and critic weight.** lr 3e-4 never learned; lr 3e-3 and critic coefficient 1.0 were
-  worse than the default; removing the entropy bonus gave a similar result (77% vs 79%), while 0.05 slowed learning (63%).
-- **REINFORCE failed in all 13 configurations** (0% delivered, returns between -5.0 and -1.6). Its policy entropy stays high
-  (mostly above 1.5 of a maximum of 2.08, figure above), which means it barely improved. It takes one gradient step per batch, so it makes
-  far fewer updates than PPO within the same frame budget, and with one long episode per update the Monte-Carlo gradient is very noisy
-  while delivery is rare early on. Value baselines and smaller batches changed the return only slightly (best: cfg13, -1.59). I did not find a
-  bug in the implementation, but I cannot rule one out.
-- **Generalization.** Held-out layouts (same difficulty, new geometry) cost the good agents little (PPO 84%, DQN 79%).
-  The stress layouts (6 obstacles, double wind) are harder: PPO keeps 70% but DQN and A2C fall to 51%.
-- **Limits.** Each configuration was run with a single seed, so small differences (a few percentage points) are not
-  reliable: in earlier 500,000-frame runs the same DQN configuration gave 0%, 56% and 76% on three seeds.
+- **PPO is the most robust and the fastest.** 8 of 10 configurations deliver 74-94%, and the working ones reach a greedy
+  return of +5 after 60k-180k frames. The two failures: lr 1e-4 (too slow) and entropy coefficient 0.05 (policy stays random).
+- **A2C ends up as good as PPO but is more sensitive.** lr 3e-3 and no entropy bonus gave 90-92%; lr 3e-4 and entropy 0.05
+  failed. It needs 170k-300k frames.
+- **DQN can do well but is fragile.** Half the configurations deliver 65-85%, the other half collapse (0-14%): hard target
+  updates, a 100k buffer, a 256x256 network and a final epsilon of 0.1 all failed. Best: Double DQN with gamma 0.95.
+- **REINFORCE failed in all 13 configurations** (0% delivered). It makes one gradient step per batch (about 600 in total,
+  vs about 9,000 for PPO) and its policy entropy barely drops. I did not find a bug in the update, but I cannot rule one out.
+- **Behaviour.** PPO and A2C stay at the 0.5 m start height and steer around obstacles; DQN descends to about 0.2 m before
+  the drop and is the fastest (31 steps). All three still crash into an obstacle in 8-11% of episodes.
+- **Generalization.** Held-out layouts cost little (PPO 87%, A2C 88%, DQN 90%). Stress layouts cost 10-12 points, but the RL
+  agents (73-82%) hold up better there than the scripted controller (56%).
+- **Limits.** One seed per configuration, so differences of a few points are not reliable (the A2C baseline at 34% next
+  to variants at 74-92% looks like seed luck).
 
 ### Reproduce
 
 ```bash
-uv run main.py sweep      # 43 runs, about 1 hour on 8 cores; ends by calling analyze
+uv run main.py sweep      # 43 runs, about 1.5 hours on 8 cores; ends by calling analyze
 uv run main.py analyze    # only rebuild tables, figures and models/best.json
 ```
 

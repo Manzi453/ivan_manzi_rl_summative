@@ -384,8 +384,8 @@ def analyze() -> None:
     for k, a in enumerate(best):
         ax.bar(np.arange(3) + (k - 1.5) * 0.2, [best[a][s] * 100 for s, _ in splits], 0.2, color=ALGO_COLOR[a], label=ALGO_LABEL[a])
     ax.set(title="Generalization: parcels delivered by the best agent of each algorithm", ylabel="% of 100 episodes",
-           xticks=range(3), xticklabels=[n for _, n in splits], ylim=(0, 100))
-    ax.legend(ncol=4, fontsize=8, loc="lower left"); fig.tight_layout(); fig.savefig(adir / "fig_generalization.png", dpi=150); plt.close(fig)
+           xticks=range(3), xticklabels=[n for _, n in splits], ylim=(0, 112))
+    ax.legend(ncol=4, fontsize=8, loc="upper center"); fig.tight_layout(); fig.savefig(adir / "fig_generalization.png", dpi=150); plt.close(fig)
 
     fig, ax = plt.subplots(1, 4, figsize=(14, 3.6), sharey=True)
     for k, a in enumerate(ALGOS):
