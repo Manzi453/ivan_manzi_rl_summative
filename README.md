@@ -17,7 +17,7 @@ flight (right). It steers around the obstacles at 0.5 m, brakes before the pad a
 ## Quick start (uv only)
 
 ```bash
-git clone https://github.com/Manzi453/ivan_manzi_rl_summative- && cd ivan_manzi_rl_summative-
+git clone https://github.com/Manzi453/ivan_manzi_rl_summative && cd ivan_manzi_rl_summative
 uv sync
 uv run main.py                  # results table + replay of the best agent (terminal log, GIF saved to assets/)
 uv run mjpython main.py play    # live MuJoCo window of the best agent (macOS needs mjpython; Linux/Windows: uv run main.py play)
@@ -55,7 +55,7 @@ uv run pytest                   # 14 environment tests
 │   └── pg/                 # REINFORCE / PPO / A2C checkpoints; models/best.json names the best of each
 ├── logs/                   # curves/*.csv (per run), runs.jsonl (final evaluations), tables/sweep_all.csv
 ├── assets/                 # environment preview, demo GIFs, report figures (fig_*.png)
-├── report/                 # final report (.docx + .pdf) and video script
+├── report/                 # final report on the ALU template (.docx + .pdf) and video script
 └── tests/                  # pytest suite for the environment
 ```
 

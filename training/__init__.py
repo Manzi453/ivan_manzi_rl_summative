@@ -347,6 +347,23 @@ def analyze() -> None:
     ax[1].set(title="Rolling training-episode return (last 50 episodes)", xlabel="environment frames", ylabel="mean return")
     ax[0].legend(); fig.tight_layout(); fig.savefig(adir / "fig_reward_comparison.png", dpi=150); plt.close(fig)
 
+    fig, axs = plt.subplots(2, 2, figsize=(11, 6.2), sharex=True, sharey=True)
+    for ax, a in zip(axs.flat, ALGOS):
+        if a not in best:
+            continue
+        c = _curve(a, best[a]["run"])
+        tr, ev = c.dropna(subset=["train_return"]), c.dropna(subset=["eval_return"])
+        ax.plot(tr["frames"], tr["train_return"], color=ALGO_COLOR[a], lw=1.2, alpha=0.7, label="training episodes (mean of last 50)")
+        ax.plot(ev["frames"], ev["eval_return"], color="black", lw=1.8, label="greedy evaluation (30 episodes)")
+        ax.axhline(CONVERGENCE_RETURN, color="grey", ls="--", lw=1)
+        ax.set(title=f"{ALGO_LABEL[a]} ({best[a]['run']})")
+    for ax in axs[1]:
+        ax.set_xlabel("environment frames")
+    for ax in axs[:, 0]:
+        ax.set_ylabel("episode return")
+    axs[0, 0].legend(fontsize=8, loc="upper left")
+    fig.tight_layout(); fig.savefig(adir / "fig_cumulative_rewards.png", dpi=150); plt.close(fig)
+
     fig, ax = plt.subplots(figsize=(7, 4))
     for r in runs["dqn"]:
         c = _curve("dqn", r["run_id"]).dropna(subset=["loss"])
