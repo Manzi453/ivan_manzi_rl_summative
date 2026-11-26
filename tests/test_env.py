@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 from gymnasium.spaces import Discrete
 
-from environment.custom_env import (ACTION_NAMES, CLIMB, HOLD, OBS_DIM, PAD_RADIUS, RELEASE, SPLITS, DeliveryDroneEnv,
+from environment.custom_env import (ACTION_NAMES, CLIMB, DESCEND, HOLD, OBS_DIM, PAD_RADIUS, RELEASE, SPLITS, DeliveryDroneEnv,
                                     evaluate_policy, make_layout, scripted_policy)
 
 
@@ -98,6 +98,17 @@ def test_crash_into_obstacle():
             out = info["outcome"]
             break
     assert out == "crashed" and r == -5.0
+
+
+def test_flying_into_ground_is_a_crash():
+    env = DeliveryDroneEnv()
+    env.reset(seed=5)
+    info = {}
+    for _ in range(10):
+        _, r, te, _, info = env.step(DESCEND)
+        if te:
+            break
+    assert info["outcome"] == "crashed" and env.pos[2] > -0.02
 
 
 def test_battery_geofence_timeout():

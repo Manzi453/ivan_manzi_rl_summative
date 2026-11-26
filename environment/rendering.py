@@ -1,5 +1,5 @@
 # pyright: reportAttributeAccessIssue=false
-"""MuJoCo scene (MJCF) and rendering; rays only hit geom group 0 (floor + obstacles)."""
+"""MuJoCo scene (MJCF) and rendering; rays only hit geom group 0, filterparent off so the floor collides."""
 from __future__ import annotations
 
 import time
@@ -26,7 +26,9 @@ def build_xml() -> str:
     a = ARENA
     return f"""
 <mujoco model="delivery_drone">
-  <option timestep="{TIMESTEP}" gravity="0 0 -9.81" integrator="implicitfast"/>
+  <option timestep="{TIMESTEP}" gravity="0 0 -9.81" integrator="implicitfast">
+    <flag filterparent="disable"/>
+  </option>
   <visual>
     <global offwidth="1280" offheight="720"/>
     <quality shadowsize="2048"/>
@@ -66,7 +68,7 @@ def build_xml() -> str:
 
     {_obstacle_xml()}
 
-    <body name="drone" pos="0 0 0.5">
+    <body name="drone" pos="0 0 0">
       <joint name="jx" type="slide" axis="1 0 0" damping="0.05"/>
       <joint name="jy" type="slide" axis="0 1 0" damping="0.05"/>
       <joint name="jz" type="slide" axis="0 0 1" damping="0.05"/>

@@ -93,10 +93,10 @@ def play(algo: str = "best", episodes: int = 3, headless: bool = False, split: s
 
 
 def summary() -> None:
-    p = ROOT / "logs" / "tables" / "summary_best.md"
-    if p.exists():
+    if (ROOT / "logs" / "tables" / "sweep_all.csv").exists():
+        from training import summary_table
         print("\nResults: best configuration of each algorithm (100 greedy episodes per split):\n")
-        print(p.read_text())
+        print(summary_table())
 
 
 def sweep(algos: tuple[str, ...], frames: int, workers: int, seed: int = 0, only: tuple[int, ...] = ()) -> None:

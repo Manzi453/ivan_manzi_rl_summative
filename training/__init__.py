@@ -289,6 +289,20 @@ def _hp_text(r: dict) -> str:
     return ", ".join(f"{k}={c[k]}" for k in keys if k in c)
 
 
+def summary_table() -> str:
+    with open(ROOT / "logs" / "tables" / "sweep_all.csv") as f:
+        all_rows = list(csv.DictReader(f))
+    lines = ["Algorithm  Best run  Train return  Delivered train / held-out / stress  Crashed (train)"]
+    for a in ALGOS:
+        rows = [r for r in all_rows if r["algo"] == a]
+        if rows:
+            b = max(rows, key=lambda r: float(r["train_return"]))
+            v = {k: float(b[k]) for k in ("train_return", "train_delivered", "heldout_delivered", "stress_delivered", "train_crashed")}
+            lines.append(f"{ALGO_LABEL[a]:<10} {b['run']:<9} {v['train_return']:+12.2f}  {v['train_delivered']:>15.0%} / "
+                         f"{v['heldout_delivered']:.0%} / {v['stress_delivered']:.0%} {v['train_crashed']:>14.0%}")
+    return "\n".join(lines)
+
+
 def analyze() -> None:
     import matplotlib
     matplotlib.use("Agg")
@@ -315,24 +329,7 @@ def analyze() -> None:
             best[a] = max((x for x in rows if x["algo"] == a), key=lambda x: x["train_return"])
     df = pd.DataFrame(rows)
     df.to_csv(tdir / "sweep_all.csv", index=False)
-    for a in ALGOS:
-        d = df[df.algo == a]
-        lines = [f"### {ALGO_LABEL[a]}: {len(d)} configurations ({int(np.max(d['frames'])):,} frames each, seed 0)", "",
-                 "| Run | Hyperparameters | Train return | Delivered (train) | Delivered (held-out) | Delivered (stress) | Frames to converge |",
-                 "|---|---|---|---|---|---|---|"]
-        for _, x in d.iterrows():
-            conv = "never" if np.isnan(x.frames_to_converge) else f"{int(x.frames_to_converge):,}"
-            mark = " **(best)**" if best[a]["run"] == x.run else ""
-            lines.append(f"| {x.run}{mark} | {x.hyperparameters} | {x.train_return:+.2f} | {x.train_delivered:.0%} | "
-                         f"{x.heldout_delivered:.0%} | {x.stress_delivered:.0%} | {conv} |")
-        (tdir / f"sweep_{a}.md").write_text("\n".join(lines) + "\n")
     overall = max(best, key=lambda a: best[a]["train_return"])
-    summ = ["| Algorithm | Best run | Train return | Delivered: train / held-out / stress | Crashed (train) |", "|---|---|---|---|---|"]
-    for a in sorted(best, key=lambda a: -best[a]["train_return"]):
-        b = best[a]
-        summ.append(f"| {ALGO_LABEL[a]} | {b['run']} | {b['train_return']:+.2f} | {b['train_delivered']:.0%} / "
-                    f"{b['heldout_delivered']:.0%} / {b['stress_delivered']:.0%} | {b['train_crashed']:.0%} |")
-    (tdir / "summary_best.md").write_text("\n".join(summ) + "\n")
     (ROOT / "models" / "best.json").write_text(json.dumps(
         {"overall": overall, "models": {a: {"path": best[a]["model"], "run": best[a]["run"]} for a in best}}, indent=2) + "\n")
 
@@ -397,5 +394,5 @@ def analyze() -> None:
         ax[k].set(title=ALGO_LABEL[a], xticks=range(len(d)), xticklabels=[r[-2:] for r in d.run], xlabel="configuration")
     ax[0].set_ylabel("final greedy return (train layouts)")
     fig.tight_layout(); fig.savefig(adir / "fig_sweep_returns.png", dpi=150); plt.close(fig)
-    print((tdir / "summary_best.md").read_text())
+    print(summary_table())
     print(f"Overall best: {ALGO_LABEL[overall]} {best[overall]['run']}. Tables -> logs/tables/, figures -> assets/fig_*.png, models/best.json updated.")
