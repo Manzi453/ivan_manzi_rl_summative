@@ -1,8 +1,4 @@
-"""Value-based method: Deep Q-Network (DQN) with TorchRL.
-
-TorchRL building blocks: GymWrapper env, QValueActor, EGreedyModule, Collector,
-ReplayBuffer + LazyTensorStorage, DQNLoss, SoftUpdate / HardUpdate.
-"""
+"""DQN training with torchrl (e-greedy, replay buffer, soft/hard target update, optional double DQN)."""
 from __future__ import annotations
 
 import time
@@ -21,9 +17,9 @@ from training import (EVAL_EVERY, ROOT, TOTAL_FRAMES, EpisodeTracker, RunLogger,
 
 DEFAULTS = dict(
     lr=1e-3, gamma=0.99, hidden=(128, 128), activation="relu",
-    eps_init=1.0, eps_end=0.05, eps_anneal_frames=20_000,   # exploration schedule
-    buffer_size=50_000, batch_size=64, frames_per_batch=32, utd=4,   # replay + updates per collected batch
-    target="soft", tau=0.01, hard_interval=500,             # target-network update rule
+    eps_init=1.0, eps_end=0.05, eps_anneal_frames=20_000,
+    buffer_size=50_000, batch_size=64, frames_per_batch=32, utd=4,
+    target="soft", tau=0.01, hard_interval=500,
     double_dqn=False, loss_fn="smooth_l1", init_random_frames=1_000, max_grad_norm=10.0,
 )
 

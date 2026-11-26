@@ -1,14 +1,4 @@
-"""DeliveryDrone-v0: a MuJoCo medical-delivery drone (Gymnasium environment).
-
-Mission: a drone takes off from a hub carrying a medical parcel (blood / vaccines) and must
-release it over a rural clinic's landing pad - low, slow and inside the pad - without crashing
-into obstacles, leaving the geofence or running out of battery. Rwanda already runs this kind of
-drone delivery, which is what makes the problem realistic.
-
-Physics is real MuJoCo (gravity, inertia, collisions). The agent chooses *high-level* discrete
-commands; a small velocity controller turns the current commands into forces on the drone.
-Everything below (actions, observations, rewards, start / terminal states) is documented in README.md.
-"""
+"""DeliveryDrone-v0: MuJoCo drone that has to drop a medical parcel on a clinic pad (details in README)."""
 from __future__ import annotations
 
 import math
@@ -22,9 +12,7 @@ from gymnasium import spaces
 
 from environment.rendering import ARENA, MAX_OBSTACLES, SceneRenderer, annotate, build_xml
 
-# --------------------------------------------------------------------------- #
-# Actions
-# --------------------------------------------------------------------------- #
+# ---- actions ----
 HOLD, CLIMB, DESCEND, SPEED_UP, SLOW_DOWN, TURN_LEFT, TURN_RIGHT, RELEASE = range(8)
 ACTION_NAMES = ["HOLD", "CLIMB", "DESCEND", "SPEED_UP", "SLOW_DOWN", "TURN_LEFT", "TURN_RIGHT", "RELEASE"]
 
@@ -37,52 +25,50 @@ OBS_NAMES = [
 OBS_DIM = len(OBS_NAMES)
 N_ACTIONS = len(ACTION_NAMES)
 
-# --------------------------------------------------------------------------- #
-# Physical / task constants
-# --------------------------------------------------------------------------- #
-FRAME_SKIP = 20                 # 20 physics steps x 0.01 s  = 0.2 s per decision
+# ---- constants ----
+FRAME_SKIP = 20
 DT = 0.2
 MAX_STEPS = 120
-CRUISE_STEP = 0.5               # SPEED_UP / SLOW_DOWN change the speed command by 0.5 m/s
+CRUISE_STEP = 0.5
 MAX_SPEED_CMD = 2.0
-CLIMB_RATE = 1.0                # m/s while CLIMB / DESCEND is chosen
-TURN_RATE = 1.5                 # rad/s while TURN_* is chosen
+CLIMB_RATE = 1.0
+TURN_RATE = 1.5
 KP_V, KP_VZ, KP_W = 4.0, 6.0, 8.0
-A_MAX = 3.5                     # m/s^2 control-acceleration limit (gives real inertia)
+A_MAX = 3.5
 MASS, IZ, G = 1.2, 0.02, 9.81
-CEILING = 4.5                   # legal flight ceiling (m)
-RANGE_MAX = 4.0                 # range-finder reach (m)
+CEILING = 4.5
+RANGE_MAX = 4.0
 PAD_RADIUS = 0.6
-SOFT_HEIGHT = 1.0               # release must be below this height ...
-SOFT_SPEED = 0.6                # ... and slower than this ground speed (m/s)
+SOFT_HEIGHT = 1.0
+SOFT_SPEED = 0.6
 START_Z = 0.5
 RELEASE_LOCK = 2.0              # drop mechanism is locked farther than this from the clinic (safety interlock)
-R_INVALID = -0.05               # RELEASE while locked
+R_INVALID = -0.05
 
-# Rewards
 R_STEP = -0.02
-R_PROGRESS = 0.5                # per metre closer to the pad          \
-W_ALIGN = 0.4                   # facing the pad                        |  potential-based shaping terms:
-W_HEIGHT = 0.25                 # low over the pad (per metre above 0.8)|  reward = phi(s') - phi(s), which leaves the
-W_SPEED = 0.5                   # slow over the pad (per m/s)           /  optimal policy unchanged (Ng et al., 1999)
-NEAR_RADIUS = 3.0               # height / speed shaping fades in inside this distance
+# shaping: reward gets phi(s') - phi(s). potential based so it doesn't change the optimal policy (Ng 1999)
+R_PROGRESS = 0.5
+W_ALIGN = 0.4
+W_HEIGHT = 0.25
+W_SPEED = 0.5
+NEAR_RADIUS = 3.0
 R_DELIVERED = 10.0
-R_BATTERY_BONUS = 2.0           # x battery fraction left on a soft delivery
-R_DAMAGED = 2.0                 # released over the pad but too high / too fast
-R_FAIL = -5.0                   # crash, battery empty, geofence, parcel lost
+R_BATTERY_BONUS = 2.0
+R_DAMAGED = 2.0
+R_FAIL = -5.0
 R_TIMEOUT = -2.0
 
-SPLITS = {            # layout-id pools. "train" / "heldout" never overlap; "stress" is harder.
+SPLITS = {
     "train": (0, 400),
     "heldout": (10_000, 10_100),
     "stress": (20_000, 20_100),
 }
 N_OBSTACLES = {"train": 4, "heldout": 4, "stress": 6}
-WIND_MAX = {"train": 1.5, "heldout": 1.5, "stress": 3.0}   # m/s^2 disturbance
+WIND_MAX = {"train": 1.5, "heldout": 1.5, "stress": 3.0}
 
 
 def make_layout(layout_id: int, n_obstacles: int) -> dict[str, Any]:
-    """Deterministic world geometry for one layout id (hub, pad, obstacles)."""
+    """hub, pad and obstacles for a layout id (same id -> same map)"""
     rng = np.random.default_rng(layout_id)
     for _ in range(200):
         hub = rng.uniform(-4.8, 4.8, 2)
@@ -91,11 +77,11 @@ def make_layout(layout_id: int, n_obstacles: int) -> dict[str, Any]:
         pad = hub + dist * np.array([math.cos(ang), math.sin(ang)])
         if np.all(np.abs(pad) <= 4.8):
             break
-    obstacles: list[tuple[float, float, float, float]] = []   # x, y, radius, height
+    obstacles: list[tuple[float, float, float, float]] = []
     tries = 0
     while len(obstacles) < n_obstacles and tries < 500:
         tries += 1
-        if not obstacles:                                     # first one blocks the straight line
+        if not obstacles:
             t = rng.uniform(0.35, 0.65)
             p = hub + t * (pad - hub)
             nrm = np.array([-(pad - hub)[1], (pad - hub)[0]]) / np.linalg.norm(pad - hub)
@@ -134,15 +120,13 @@ class DeliveryDroneEnv(gym.Env):
         self._clinic_mocap = m.body_mocapid[m.body("clinic").id]
         self._parcel_qadr = m.jnt_qposadr[m.joint("pfree").id]
         self._parcel_geom = m.geom("parcel_g").id
-        self._ray_mask = np.array([1, 0, 0, 0, 0, 0], dtype=np.uint8)   # solid world only
+        self._ray_mask = np.array([1, 0, 0, 0, 0, 0], dtype=np.uint8)
         self._renderer: SceneRenderer | None = None
         self._cam = (camera, width, height)
         self._follow = follow
         self._reset_state()
 
-    # ------------------------------------------------------------------ #
-    # state helpers
-    # ------------------------------------------------------------------ #
+    # ---- state helpers ----
     def _reset_state(self):
         self.steps = 0
         self.done = False
@@ -172,7 +156,7 @@ class DeliveryDroneEnv(gym.Env):
         return float(np.linalg.norm(self._pad_vec_world()))
 
     def _phi(self) -> float:
-        """Potential used for reward shaping (progress, alignment, low + slow near the pad)."""
+        """potential for the reward shaping"""
         pv = self._pad_vec_world()
         dist = float(np.hypot(pv[0], pv[1]))
         bearing = abs(math.atan2(*self._to_body(pv[0], pv[1])[::-1]))
@@ -187,9 +171,7 @@ class DeliveryDroneEnv(gym.Env):
         c, s = math.cos(self.yaw), math.sin(self.yaw)
         return c * vx + s * vy, -s * vx + c * vy
 
-    # ------------------------------------------------------------------ #
-    # gym API
-    # ------------------------------------------------------------------ #
+    # ---- gym API ----
     def reset(self, *, seed: int | None = None, options: dict | None = None):
         super().reset(seed=seed)
         self._reset_state()
@@ -285,9 +267,7 @@ class DeliveryDroneEnv(gym.Env):
             self.render()
         return self._obs(), float(reward), terminated, truncated, self._info()
 
-    # ------------------------------------------------------------------ #
-    # physics
-    # ------------------------------------------------------------------ #
+    # ---- physics ----
     def _simulate(self, vz_cmd: float, w_cmd: float) -> bool:
         d, m = self.data, self.model
         for _ in range(FRAME_SKIP):
@@ -297,9 +277,9 @@ class DeliveryDroneEnv(gym.Env):
             ay = max(-A_MAX, min(A_MAX, KP_V * (tvy - d.qvel[1])))
             az = max(-A_MAX, min(A_MAX, KP_VZ * (vz_cmd - d.qvel[2])))
             aw = max(-12.0, min(12.0, KP_W * (w_cmd - d.qvel[3])))
-            d.qfrc_applied[0] = MASS * (ax + self.wind[0])      # wind is a disturbance the controller can't see
+            d.qfrc_applied[0] = MASS * (ax + self.wind[0])
             d.qfrc_applied[1] = MASS * (ay + self.wind[1])
-            d.qfrc_applied[2] = MASS * (G + az)                 # hover thrust + commanded vertical accel
+            d.qfrc_applied[2] = MASS * (G + az)
             d.qfrc_applied[3] = IZ * aw
             mujoco.mj_step(m, d)
             for k in range(d.ncon):
@@ -323,13 +303,13 @@ class DeliveryDroneEnv(gym.Env):
         mujoco.mj_kinematics(self.model, self.data)
 
     def _release(self) -> float:
-        """RELEASE: drop the parcel. Outcome depends on where / how fast the drone is."""
+        """drop the parcel and score it (delivered / damaged / lost)"""
         dist, height, speed = self._pad_distance(), float(self.pos[2]), self._ground_speed()
         if dist <= PAD_RADIUS and height <= SOFT_HEIGHT and speed <= SOFT_SPEED:
             self.outcome = "delivered"
             r = R_DELIVERED + R_BATTERY_BONUS * max(self.battery, 0.0) / 100.0
         elif dist <= PAD_RADIUS:
-            self.outcome = "damaged"        # over the pad but too high / too fast
+            self.outcome = "damaged"
             r = R_DAMAGED
         else:
             self.outcome = "parcel_lost"
@@ -338,7 +318,7 @@ class DeliveryDroneEnv(gym.Env):
         return r
 
     def _drop_animation(self):
-        """Cosmetic only: let the parcel fall for 1 s so the replay shows the drop."""
+        """just visual: let the parcel fall for 1s so you can see it in the replay"""
         d, m = self.data, self.model
         self.parcel_attached = False
         m.geom_contype[self._parcel_geom] = 1
@@ -349,9 +329,7 @@ class DeliveryDroneEnv(gym.Env):
             d.qfrc_applied[:2] = 0
             mujoco.mj_step(m, d)
 
-    # ------------------------------------------------------------------ #
-    # observations
-    # ------------------------------------------------------------------ #
+    # ---- observations ----
     def _ray(self, angle: float, down: bool = False) -> float:
         d, m = self.data, self.model
         origin = np.array([d.qpos[0], d.qpos[1], d.qpos[2]], dtype=np.float64)
@@ -374,7 +352,7 @@ class DeliveryDroneEnv(gym.Env):
         rng = self.np_random
         rays = [self._ray(a) for a in (-math.pi / 2, -math.pi / 4, 0.0, math.pi / 4, math.pi / 2)]
         down = self._ray(0.0, down=True)
-        wf, wl = self._to_body(*(self.wind + rng.normal(0, 0.1, 2)))   # noisy anemometer
+        wf, wl = self._to_body(*(self.wind + rng.normal(0, 0.1, 2)))
         o = np.array([
             fwd / 10.0, left / 10.0, dist / 10.0, bearing / math.pi,
             d.qpos[2] / CEILING, vf / 2.5, vl / 2.5, d.qvel[2] / 1.5, self.fwd_cmd / MAX_SPEED_CMD,
@@ -399,9 +377,7 @@ class DeliveryDroneEnv(gym.Env):
             "speed_command": self.fwd_cmd,
         }
 
-    # ------------------------------------------------------------------ #
-    # integration: serialise the world for a web / mobile front end
-    # ------------------------------------------------------------------ #
+    # ---- json for a web/mobile front end ----
     def to_json(self) -> dict[str, Any]:
         return {
             "layout_id": self.layout_id,
@@ -421,9 +397,7 @@ class DeliveryDroneEnv(gym.Env):
             "path": [[float(v) for v in p] for p in self.path],
         }
 
-    # ------------------------------------------------------------------ #
-    # rendering
-    # ------------------------------------------------------------------ #
+    # ---- rendering ----
     def render(self, status: bool = False):
         if self.render_mode is None:
             return None
@@ -451,19 +425,14 @@ class DeliveryDroneEnv(gym.Env):
             self._renderer = None
 
 
-# --------------------------------------------------------------------------- #
-# Reference policies (sanity checks for the environment and comparison rows in the report)
-#   random_policy  - uniform random actions (lower bound)
-#   scripted_policy - hand-written "fly high, steer, slow down, descend, release" controller that only
-#                     sees the observation vector (same information as the RL agents)
-# --------------------------------------------------------------------------- #
+# ---- baselines ----
 
 def random_policy(env):
     return lambda obs: env.action_space.sample()
 
 
 def scripted_policy(cruise_height: float = 3.9):
-    """Returns act(obs) -> action using only the 19-dim observation."""
+    """act(obs) -> action, only looks at the 19 obs values"""
     def act(obs):
         dist = obs[2] * 10.0
         bearing = obs[3] * math.pi
@@ -472,7 +441,7 @@ def scripted_policy(cruise_height: float = 3.9):
         cmd = obs[8] * 2.0
         if dist < 0.55 and height <= 0.9 and speed < 0.5:
             return RELEASE
-        if abs(bearing) > 0.3 and dist > 0.55:                      # steer first (slow down to turn)
+        if abs(bearing) > 0.3 and dist > 0.55:
             if cmd > 1.0:
                 return SLOW_DOWN
             return TURN_LEFT if bearing > 0 else TURN_RIGHT
@@ -480,7 +449,7 @@ def scripted_policy(cruise_height: float = 3.9):
             if height < cruise_height - 0.3:
                 return CLIMB
             return SPEED_UP if cmd < 2.0 else HOLD
-        target = 1.0 if dist > 1.5 else 0.5  # approach: brake in stages
+        target = 1.0 if dist > 1.5 else 0.5
         if cmd > target:
             return SLOW_DOWN
         if height > 0.8:
@@ -490,7 +459,7 @@ def scripted_policy(cruise_height: float = 3.9):
 
 
 def evaluate_policy(policy_factory, env, episodes: int = 50, seed: int = 0):
-    """Run a policy for N episodes; returns mean return and outcome counts."""
+    """run a policy for some episodes -> mean return + how each episode ended"""
     outcomes, returns, steps = Counter(), [], []
     for ep in range(episodes):
         obs, info = env.reset(seed=seed + ep)

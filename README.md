@@ -55,11 +55,10 @@ uv run pytest                   # 13 environment tests
 
 ## Environment: `DeliveryDrone-v0`
 
-**Mission link.** Medical drone delivery is a real, growing service in Rwanda. Delivering fast matters, but a
-rushed drop can destroy the parcel, so speed has to be traded against safety.
+**Link to my mission.** Drone delivery of medical supplies is already a real thing in Rwanda. You want to deliver fast,
+but a rushed drop can destroy the parcel, so the drone has to balance speed against safety.
 
-**Why RL and not planning or prediction.** Every action changes the state that later decisions depend on, and
-the trade-offs pay off late:
+**Why RL?** Each action changes the state that the next decisions depend on, and most trade-offs only pay off later:
 - Climbing clears obstacles but burns battery and the release must happen low.
 - Speed saves battery per metre but speed cannot be shed instantly (real inertia), so braking has to start
   several steps before the pad.
@@ -179,11 +178,11 @@ Delivered = share of 100 greedy episodes that ended with a soft release over the
 
 ### What the sweeps show
 
-- **PPO is the most robust and fastest.** 9 of 10 configurations deliver 77-87% of parcels, and the best ones reach a
+- **PPO was the most robust and the fastest.** 9 of 10 configurations deliver 77-87% of parcels, and the best ones reach a
   greedy return of +5 after only 81,000 to 90,000 frames (DQN and A2C need about 180,000). The one failure is an entropy
   bonus of 0.05 (cfg07), which keeps the policy close to random. Clip range (0.1 to 0.3) and batch size barely matter; a lower
   learning rate (1e-4) is slower and weaker.
-- **DQN learns, but is unstable.** Its evaluation return jumps between checkpoints (see the reward figure) and it is sensitive
+- **DQN learns but is unstable.** Its evaluation return jumps between checkpoints (see the reward figure) and it is sensitive
   to three settings: learning rate 3e-4 (1% delivered), a hard target update every 500 steps (14%) and a 100k replay buffer (3%).
   Double DQN configurations (cfg02, cfg03, cfg05) generalize better to held-out and stress layouts (up to 86% and 67%) than the plain
   DQN with the best training score (cfg01: 79% and 51%).

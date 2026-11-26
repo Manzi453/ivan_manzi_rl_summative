@@ -45,26 +45,26 @@ def test_actions_change_state():
     z0 = env.pos[2]
     for _ in range(5):
         env.step(CLIMB)
-    assert env.pos[2] > z0 + 0.3                      # climbing really raises the drone (physics)
+    assert env.pos[2] > z0 + 0.3
     yaw0 = env.yaw
     env.step(5)
-    assert env.yaw != yaw0                            # turning changes heading
+    assert env.yaw != yaw0
     env.step(3)
-    assert env.fwd_cmd == 0.5                         # speed command persists in the state
+    assert env.fwd_cmd == 0.5
 
 
 def test_release_interlock_far_from_pad():
     env = DeliveryDroneEnv()
     env.reset(seed=3)
     _, r, te, tr, info = env.step(RELEASE)
-    assert not te and info["outcome"] == "flying" and r < 0   # locked: nothing dropped
+    assert not te and info["outcome"] == "flying" and r < 0
 
 
 def test_parcel_lost_near_but_outside_pad():
     env = DeliveryDroneEnv()
     env.reset(seed=3)
     pad = env.layout["pad"]
-    env.data.qpos[:3] = (pad[0] + 1.5, pad[1], 0.6)           # inside interlock radius, outside pad
+    env.data.qpos[:3] = (pad[0] + 1.5, pad[1], 0.6)
     _, r, te, _, info = env.step(RELEASE)
     assert te and info["outcome"] == "parcel_lost" and r < -4
 
@@ -78,7 +78,7 @@ def test_soft_delivery_and_damaged():
     _, r, te, _, info = env.step(RELEASE)
     assert te and info["outcome"] == "delivered" and r > 9
     env.reset(seed=4)
-    env.data.qpos[:3] = (pad[0], pad[1], 3.0)                 # over pad but too high
+    env.data.qpos[:3] = (pad[0], pad[1], 3.0)
     _, r, te, _, info = env.step(RELEASE)
     assert te and info["outcome"] == "damaged" and 0 < r < 5
 
@@ -136,7 +136,7 @@ def test_splits_do_not_overlap_and_layouts_valid():
 
 def test_scripted_baseline_solves_task():
     res = evaluate_policy(lambda e: scripted_policy(), DeliveryDroneEnv(), episodes=20, seed=100)
-    assert res["outcomes"].get("delivered", 0) >= 14           # task is solvable from observations alone
+    assert res["outcomes"].get("delivered", 0) >= 14
 
 
 def test_to_json():

@@ -1,16 +1,4 @@
-"""Entry point for the medical-delivery-drone RL project.
-
-    uv run main.py                      show the results table and replay the best agent (saves a GIF in assets/)
-    uv run main.py play  [--algo best|dqn|reinforce|ppo|a2c|scripted|random] [--episodes 3] [--split train|heldout|stress]
-                         [--headless] [--fps 10] [--follow] [--snapshot]
-    uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME] [--cfg KEY=VALUE ...]
-    uv run main.py sweep [--algos dqn,reinforce,ppo,a2c] [--frames 300000] [--workers 8]   10+ configurations per algorithm
-    uv run main.py analyze              rebuild tables (logs/tables), figures (assets/fig_*.png) and models/best.json
-    uv run main.py json  [--algo best]  print one episode as JSON (state + action per step): the integration path
-
-`play` opens a live MuJoCo window (on macOS start it with `uv run mjpython main.py play ...`) and prints a
-step-by-step log. With --headless it renders off-screen and saves a GIF in assets/.
-"""
+"""Entry point: uv run main.py [play | train | sweep | analyze | json] (see README for options)."""
 from __future__ import annotations
 
 import argparse
@@ -20,7 +8,7 @@ import time
 from pathlib import Path
 
 for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
-    os.environ.setdefault(_v, "1")       # one thread per process: parallel sweeps would otherwise oversubscribe the CPU
+    os.environ.setdefault(_v, "1")
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -34,7 +22,7 @@ def load_agent(algo: str, env):
         return scripted_policy(), "scripted"
     if algo == "random":
         return random_policy(env), "random"
-    from training import best_model_path, load_policy      # trained TorchRL agents
+    from training import best_model_path, load_policy
 
     path = best_model_path(None if algo == "best" else algo)
     act = load_policy(path)
@@ -63,7 +51,7 @@ def play(algo: str = "best", episodes: int = 3, headless: bool = False, split: s
             while not done:
                 t0 = time.time()
                 a = int(act(obs))
-                obs, r, term, trunc, info = env.step(a)      # env.step renders the new state
+                obs, r, term, trunc, info = env.step(a)
                 total += r
                 done = term or trunc
                 print(f"step {info['steps']:>3} | {ACTION_NAMES[a]:<10} | reward {r:+6.2f} | battery {info['battery']:5.1f}% | "
@@ -130,8 +118,7 @@ def sweep(algos: tuple[str, ...], frames: int, workers: int, seed: int = 0, only
 
 
 def episode_json(algo: str = "best", seed: int = 2024) -> None:
-    """Integration path: one episode as JSON lines. Each line = what a dashboard / mobile app would receive
-    (the drone's state from env.to_json()) plus the command the agent sends back."""
+    """one episode as json lines (state + action each step), what a dashboard would receive"""
     import json
     env = DeliveryDroneEnv(split="train")
     act, name = load_agent(algo, env)
@@ -151,7 +138,7 @@ def train(algo: str, frames: int | None, seed: int, run_id: str | None, override
     import json
     from training import TOTAL_FRAMES
     cfg = {}
-    for item in overrides:                      # --cfg key=value (value parsed as JSON, else kept as text)
+    for item in overrides:
         key, _, val = item.partition("=")
         try:
             cfg[key] = json.loads(val)
@@ -201,7 +188,7 @@ def main() -> None:
     pl.add_argument("--snapshot", action="store_true", help="headless: also save assets/env_preview.png")
     a = ap.parse_args()
 
-    if a.cmd is None:                                   # `uv run main.py`: results table + replay of the best agent
+    if a.cmd is None:
         summary()
         try:
             play("best", 2, True)

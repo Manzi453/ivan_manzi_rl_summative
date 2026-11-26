@@ -1,9 +1,4 @@
-"""Policy-gradient methods with TorchRL: REINFORCE, PPO and A2C.
-
-TorchRL building blocks: GymWrapper env, ProbabilisticActor (Categorical policy),
-ValueOperator (critic), Collector, GAE, ClipPPOLoss, A2CLoss and
-`reward2go` for the Monte-Carlo returns used by REINFORCE.
-"""
+"""REINFORCE, PPO and A2C with torchrl (REINFORCE loss written by hand, torchrl has none)."""
 from __future__ import annotations
 
 import time
@@ -35,7 +30,7 @@ DEFAULTS = {
 
 
 def make_policy_act(actor_net: torch.nn.Module):
-    """Deterministic (arg-max) policy used for evaluation and the demo."""
+    """greedy policy (argmax), used for eval and the demo"""
     def act(obs: np.ndarray) -> int:
         with torch.no_grad():
             return int(actor_net(torch.as_tensor(obs, dtype=torch.float32)).argmax().item())
@@ -43,7 +38,7 @@ def make_policy_act(actor_net: torch.nn.Module):
 
 
 def _entropy(lv, actor, td) -> float:
-    """Policy entropy; TorchRL omits it from the loss output when the entropy coefficient is 0."""
+    """torchrl doesn't return entropy when entropy_coef=0 so compute it myself in that case"""
     if "entropy" in lv.keys():
         return float(lv["entropy"].detach())
     with torch.no_grad():
@@ -80,7 +75,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
         loss_mod = A2CLoss(actor, critic, entropy_coeff=c["entropy_coef"], critic_coeff=c["critic_coef"],
                            loss_critic_type="smooth_l1")
         params = loss_mod.parameters()
-    else:  # reinforce: policy only, Monte-Carlo reward-to-go
+    else:
         adv_mod = loss_mod = None
         params = actor.parameters()
     optim = torch.optim.Adam(params, lr=c["lr"])
@@ -105,7 +100,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             idx = done.reshape(-1).nonzero()
             if len(idx) == 0:
                 continue
-            last = int(idx[-1]) + 1                      # drop the trailing, unfinished episode
+            last = int(idx[-1]) + 1
             b = batch[:last]
             with torch.no_grad():
                 g_raw = reward2go(b["next", "reward"], b["next", "done"], c["gamma"], time_dim=-2).reshape(-1)
@@ -147,7 +142,7 @@ def train_pg(algo: str, cfg: dict, run_id: str, seed: int = 0, total_frames: int
             optim.step()
             stats["loss"].append(float(loss.detach())); stats["obj"].append(float(lv["loss_objective"].detach()))
             stats["crit"].append(float(lv["loss_critic"].detach())); stats["ent"].append(_entropy(lv, actor, batch))
-        else:  # ppo
+        else:
             with torch.no_grad():
                 adv_mod(batch)
             data = batch.reshape(-1)
