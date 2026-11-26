@@ -1,9 +1,21 @@
 {
   "overall": "ppo",
   "models": {
-    "dqn": {"path": "models/dqn/dqn_ddqn_s0.pt"},
-    "reinforce": {"path": "models/pg/reinforce_s0.pt"},
-    "ppo": {"path": "models/pg/ppo_s0.pt"},
-    "a2c": {"path": "models/pg/a2c_s2.pt"}
+    "dqn": {
+      "path": "models/dqn/dqn_cfg01.pt",
+      "run": "cfg01"
+    },
+    "reinforce": {
+      "path": "models/pg/reinforce_cfg09.pt",
+      "run": "cfg09"
+    },
+    "ppo": {
+      "path": "models/pg/ppo_cfg06.pt",
+      "run": "cfg06"
+    },
+    "a2c": {
+      "path": "models/pg/a2c_cfg07.pt",
+      "run": "cfg07"
+    }
   }
 }
