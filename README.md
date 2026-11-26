@@ -5,7 +5,7 @@ over a rural clinic's landing pad (low, slow and inside the pad) without crashin
 leaving the geofence or running out of battery. Rwanda already runs this kind of drone delivery.
 
 Four agents are trained on the same custom Gymnasium environment with TorchRL: **DQN** (value-based) and
-**REINFORCE, PPO, A2C** (policy-gradient), each with a 10-configuration hyperparameter sweep.
+**REINFORCE, PPO, A2C** (policy-gradient), each with a hyperparameter sweep of at least 10 configurations.
 
 ![environment](assets/env_preview.png)
 
@@ -25,7 +25,7 @@ uv run pytest                   # 13 environment tests
 | `uv run main.py play --split heldout` | layouts never used in training (`stress` = 6 obstacles + double wind) |
 | `uv run main.py play --headless` | no window: renders off-screen and saves a GIF in `assets/` |
 | `uv run main.py train --algo dqn --frames 150000 --cfg double_dqn=true` | train one agent, `--cfg KEY=VALUE` overrides a hyperparameter |
-| `uv run main.py sweep` | the full sweep: 4 algorithms x 10 configurations (about 30 min on 8 cores) |
+| `uv run main.py sweep` | the full sweep: 43 runs (10 configurations per algorithm, 13 for REINFORCE), about 1 hour on 8 cores |
 | `uv run main.py analyze` | rebuild `logs/tables/`, `assets/fig_*.png` and `models/best.json` from `logs/` |
 | `uv run main.py json` | one episode as JSON lines (state + action per step), see "Integration" |
 
@@ -155,4 +155,54 @@ training-layout episodes every 10,000 frames during training).
 - **PPO**: `ClipPPOLoss` with GAE.
 - **A2C**: `A2CLoss` with GAE.
 
-RESULTS_PLACEHOLDER
+## Results
+
+Sweep: 10 configurations for DQN, PPO and A2C and 13 for REINFORCE (3 added after the first 10 all failed), all with
+300,000 frames and seed 0. Full tables with every hyperparameter: [`logs/tables/`](logs/tables) (`sweep_dqn.md`,
+`sweep_reinforce.md`, `sweep_ppo.md`, `sweep_a2c.md`, `sweep_all.csv`). The best run of each algorithm is picked by
+its greedy return on the training layouts and recorded in `models/best.json`.
+
+| Algorithm | Best run | Train return | Delivered: train / held-out / stress | Crashed (train) |
+|---|---|---|---|---|
+| PPO | cfg06 | +11.25 | 87% / 84% / 70% | 11% |
+| DQN | cfg01 | +9.87 | 77% / 79% / 51% | 19% |
+| A2C | cfg07 | +9.31 | 77% / 72% / 51% | 15% |
+| REINFORCE | cfg13 | -1.59 | 0% / 0% / 0% | 1% |
+
+Delivered = share of 100 greedy episodes that ended with a soft release over the pad. Held-out and stress layouts were never used for training or model selection.
+
+![reward comparison](assets/fig_reward_comparison.png)
+![DQN loss](assets/fig_dqn_loss.png)
+![policy entropy](assets/fig_pg_entropy.png)
+![convergence](assets/fig_convergence.png)
+![generalization](assets/fig_generalization.png)
+
+### What the sweeps show
+
+- **PPO is the most robust and fastest.** 9 of 10 configurations deliver 77-87% of parcels, and the best ones reach a
+  greedy return of +5 after only 81,000 to 90,000 frames (DQN and A2C need about 180,000). The one failure is an entropy
+  bonus of 0.05 (cfg07), which keeps the policy close to random. Clip range (0.1 to 0.3) and batch size barely matter; a lower
+  learning rate (1e-4) is slower and weaker.
+- **DQN learns, but is unstable.** Its evaluation return jumps between checkpoints (see the reward figure) and it is sensitive
+  to three settings: learning rate 3e-4 (1% delivered), a hard target update every 500 steps (14%) and a 100k replay buffer (3%).
+  Double DQN configurations (cfg02, cfg03, cfg05) generalize better to held-out and stress layouts (up to 86% and 67%) than the plain
+  DQN with the best training score (cfg01: 79% and 51%).
+- **A2C works but is sensitive to step size and critic weight.** lr 3e-4 never learned; lr 3e-3 and critic coefficient 1.0 were
+  worse than the default; removing the entropy bonus gave a similar result (77% vs 79%), while 0.05 slowed learning (63%).
+- **REINFORCE failed in all 13 configurations** (0% delivered, returns between -5.0 and -1.6). Its policy entropy stays high
+  (mostly above 1.5 of a maximum of 2.08, figure above), which means it barely improved. It takes one gradient step per batch, so it makes
+  far fewer updates than PPO within the same frame budget, and with one long episode per update the Monte-Carlo gradient is very noisy
+  while delivery is rare early on. Value baselines and smaller batches changed the return only slightly (best: cfg13, -1.59). I did not find a
+  bug in the implementation, but I cannot rule one out.
+- **Generalization.** Held-out layouts (same difficulty, new geometry) cost the good agents little (PPO 84%, DQN 79%).
+  The stress layouts (6 obstacles, double wind) are harder: PPO keeps 70% but DQN and A2C fall to 51%.
+- **Limits.** Each configuration was run with a single seed, so small differences (a few percentage points) are not
+  reliable: in earlier 500,000-frame runs the same DQN configuration gave 0%, 56% and 76% on three seeds.
+
+### Reproduce
+
+```bash
+uv run main.py sweep      # 43 runs, about 1 hour on 8 cores; ends by calling analyze
+uv run main.py analyze    # only rebuild tables, figures and models/best.json
+```
+
