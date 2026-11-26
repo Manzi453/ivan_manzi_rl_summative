@@ -4,7 +4,7 @@
     uv run main.py play  [--algo best|dqn|reinforce|ppo|a2c|scripted|random] [--episodes 3] [--split train|heldout|stress]
                          [--headless] [--fps 10] [--follow] [--snapshot]
     uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME] [--cfg KEY=VALUE ...]
-    uv run main.py sweep [--algos dqn,reinforce,ppo,a2c] [--frames 300000] [--workers 8]   10 configurations per algorithm
+    uv run main.py sweep [--algos dqn,reinforce,ppo,a2c] [--frames 300000] [--workers 8]   10+ configurations per algorithm
     uv run main.py analyze              rebuild tables (logs/tables), figures (assets/fig_*.png) and models/best.json
     uv run main.py json  [--algo best]  print one episode as JSON (state + action per step): the integration path
 
@@ -111,11 +111,11 @@ def summary() -> None:
         print(p.read_text())
 
 
-def sweep(algos: tuple[str, ...], frames: int, workers: int, seed: int = 0) -> None:
+def sweep(algos: tuple[str, ...], frames: int, workers: int, seed: int = 0, only: tuple[int, ...] = ()) -> None:
     from concurrent.futures import ProcessPoolExecutor, as_completed
 
     from training import SWEEPS, run_config
-    jobs = [(a, i, frames, seed) for a in algos for i in range(len(SWEEPS[a]))]
+    jobs = [(a, i, frames, seed) for a in algos for i in range(len(SWEEPS[a])) if not only or i + 1 in only]
     print(f"{len(jobs)} runs, {frames:,} frames each, {workers} in parallel")
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=workers) as pool:
@@ -185,6 +185,7 @@ def main() -> None:
     sw = sub.add_parser("sweep", help="10 hyperparameter configurations per algorithm (parallel)")
     sw.add_argument("--algos", default="dqn,reinforce,ppo,a2c")
     sw.add_argument("--frames", type=int, default=None, help="budget per run (default: SWEEP_FRAMES = 300000)")
+    sw.add_argument("--configs", default="", help="only these configuration numbers, e.g. 11,12,13")
     sw.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     sub.add_parser("analyze", help="rebuild tables, figures and models/best.json from logs/")
     js = sub.add_parser("json", help="print one episode as JSON (state + action per step)")
@@ -210,7 +211,8 @@ def main() -> None:
         train(a.algo, a.frames, a.seed, a.run_id, a.cfg)
     elif a.cmd == "sweep":
         from training import SWEEP_FRAMES
-        sweep(tuple(a.algos.split(",")), a.frames or SWEEP_FRAMES, a.workers)
+        sweep(tuple(a.algos.split(",")), a.frames or SWEEP_FRAMES, a.workers,
+              only=tuple(int(x) for x in a.configs.split(",") if x))
     elif a.cmd == "analyze":
         from training import analyze
         analyze()

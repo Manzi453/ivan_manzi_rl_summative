@@ -219,6 +219,11 @@ SWEEPS: dict[str, list[dict]] = {
         dict(lr=3e-3, note="lr 3e-3"),
         dict(baseline="value", gamma=0.98, note="value baseline, gamma 0.98"),
         dict(baseline="value", frames_per_batch=2048, lr=5e-4, entropy_coef=0.02, note="value, batch 2048, lr 5e-4, ent 0.02"),
+        # added after configs 01-10 all failed: REINFORCE makes one gradient step per batch, so small batches
+        # give it many more updates within the same frame budget
+        dict(baseline="value", frames_per_batch=128, note="value baseline, small batch 128 (more updates)"),
+        dict(frames_per_batch=256, lr=3e-3, note="batch 256, lr 3e-3"),
+        dict(baseline="value", frames_per_batch=256, gamma=0.98, note="value baseline, batch 256, gamma 0.98"),
     ],
     "ppo": [
         dict(note="baseline: clip 0.2, 4 epochs, ent 0.01"),
@@ -329,7 +334,7 @@ def analyze() -> None:
     df.to_csv(tdir / "sweep_all.csv", index=False)
     for a in ALGOS:
         d = df[df.algo == a]
-        lines = [f"### {ALGO_LABEL[a]}: 10 configurations ({int(d.frames.max()):,} frames each, seed 0)", "",
+        lines = [f"### {ALGO_LABEL[a]}: {len(d)} configurations ({int(d.frames.max()):,} frames each, seed 0)", "",
                  "| Run | Hyperparameters | Train return | Delivered (train) | Delivered (held-out) | Delivered (stress) | Frames to converge |",
                  "|---|---|---|---|---|---|---|"]
         for _, x in d.iterrows():
@@ -368,7 +373,7 @@ def analyze() -> None:
     for r in runs["dqn"]:
         c = _curve("dqn", r["run_id"]).dropna(subset=["loss"])
         ax.plot(c["frames"], c["loss"], lw=1.6, alpha=0.9, label=r["run_id"])
-    ax.set(title="DQN objective: smooth-L1 TD loss, all 10 configurations", xlabel="environment frames",
+    ax.set(title="DQN objective: smooth-L1 TD loss, all configurations", xlabel="environment frames",
            ylabel="loss (mean of last 200 updates)", yscale="log")
     ax.legend(ncol=2, fontsize=8); fig.tight_layout(); fig.savefig(adir / "fig_dqn_loss.png", dpi=150); plt.close(fig)
 
@@ -386,6 +391,7 @@ def analyze() -> None:
     # 4. convergence speed
     fig, ax = plt.subplots(figsize=(10, 3.8))
     w = 0.2
+    nmax = int(df.groupby('algo').size().max())
     for k, a in enumerate(ALGOS):
         d = df[df.algo == a]
         vals = d.frames_to_converge.fillna(0).to_numpy() / 1000
@@ -394,7 +400,7 @@ def analyze() -> None:
             if np.isnan(v):
                 ax.text(i + (k - 1.5) * w, 2, "x", ha="center", fontsize=8, color=ALGO_COLOR[a])
     ax.set(title=f"Frames until greedy evaluation return first reaches {CONVERGENCE_RETURN:+.0f}  (x = never)",
-           xlabel="configuration number", ylabel="thousand frames", xticks=range(10), xticklabels=[f"{i:02d}" for i in range(1, 11)])
+           xlabel="configuration number", ylabel="thousand frames", xticks=range(nmax), xticklabels=[f"{i:02d}" for i in range(1, nmax + 1)])
     ax.legend(ncol=4); fig.tight_layout(); fig.savefig(adir / "fig_convergence.png", dpi=150); plt.close(fig)
 
     # 5. generalization of the best agent of each algorithm
