@@ -1,8 +1,12 @@
 """Entry point for the medical-delivery-drone RL project.
 
-    uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME] [--cfg KEY=VALUE ...]
+    uv run main.py                      show the results table and replay the best agent (saves a GIF in assets/)
     uv run main.py play  [--algo best|dqn|reinforce|ppo|a2c|scripted|random] [--episodes 3] [--split train|heldout|stress]
                          [--headless] [--fps 10] [--follow] [--snapshot]
+    uv run main.py train --algo dqn|reinforce|ppo|a2c [--frames 150000] [--seed 0] [--run-id NAME] [--cfg KEY=VALUE ...]
+    uv run main.py sweep [--algos dqn,reinforce,ppo,a2c] [--frames 300000] [--workers 8]   10 configurations per algorithm
+    uv run main.py analyze              rebuild tables (logs/tables), figures (assets/fig_*.png) and models/best.json
+    uv run main.py json  [--algo best]  print one episode as JSON (state + action per step): the integration path
 
 `play` opens a live MuJoCo window (on macOS start it with `uv run mjpython main.py play ...`) and prints a
 step-by-step log. With --headless it renders off-screen and saves a GIF in assets/.
@@ -10,9 +14,13 @@ step-by-step log. With --headless it renders off-screen and saves a GIF in asset
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import time
 from pathlib import Path
+
+for _v in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "VECLIB_MAXIMUM_THREADS"):
+    os.environ.setdefault(_v, "1")       # one thread per process: parallel sweeps would otherwise oversubscribe the CPU
 
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
@@ -96,6 +104,49 @@ def play(algo: str = "best", episodes: int = 3, headless: bool = False, split: s
         env.close()
 
 
+def summary() -> None:
+    p = ROOT / "logs" / "tables" / "summary_best.md"
+    if p.exists():
+        print("\nResults: best configuration of each algorithm (100 greedy episodes per split):\n")
+        print(p.read_text())
+
+
+def sweep(algos: tuple[str, ...], frames: int, workers: int, seed: int = 0) -> None:
+    from concurrent.futures import ProcessPoolExecutor, as_completed
+
+    from training import SWEEPS, run_config
+    jobs = [(a, i, frames, seed) for a in algos for i in range(len(SWEEPS[a]))]
+    print(f"{len(jobs)} runs, {frames:,} frames each, {workers} in parallel")
+    t0 = time.time()
+    with ProcessPoolExecutor(max_workers=workers) as pool:
+        futs = {pool.submit(run_config, j): j for j in jobs}
+        for n, f in enumerate(as_completed(futs), 1):
+            a, i, *_ = futs[f]
+            e = f.result()["final_eval"]["train"]
+            print(f"[{n}/{len(jobs)}] {a} cfg{i + 1:02d}: return {e['return_mean']:+.2f}, delivered {e['success_rate']:.0%} "
+                  f"({(time.time() - t0) / 60:.1f} min elapsed)", flush=True)
+    from training import analyze
+    analyze()
+
+
+def episode_json(algo: str = "best", seed: int = 2024) -> None:
+    """Integration path: one episode as JSON lines. Each line = what a dashboard / mobile app would receive
+    (the drone's state from env.to_json()) plus the command the agent sends back."""
+    import json
+    env = DeliveryDroneEnv(split="train")
+    act, name = load_agent(algo, env)
+    obs, info = env.reset(seed=seed)
+    print(json.dumps({"event": "start", "agent": name, "state": env.to_json()}))
+    done = False
+    while not done:
+        a = int(act(obs))
+        obs, r, term, trunc, info = env.step(a)
+        done = term or trunc
+        print(json.dumps({"event": "step", "step": info["steps"], "action": ACTION_NAMES[a], "reward": round(float(r), 3),
+                          "state": env.to_json()}))
+    print(json.dumps({"event": "end", "outcome": info["outcome"], "steps": info["steps"]}))
+
+
 def train(algo: str, frames: int | None, seed: int, run_id: str | None, overrides: list[str]) -> None:
     import json
     from training import TOTAL_FRAMES
@@ -121,7 +172,7 @@ def train(algo: str, frames: int | None, seed: int, run_id: str | None, override
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Medical delivery drone RL")
-    sub = ap.add_subparsers(dest="cmd", required=True)
+    sub = ap.add_subparsers(dest="cmd")
 
     tr = sub.add_parser("train", help="train one agent with TorchRL and save it to models/")
     tr.add_argument("--algo", required=True, choices=["dqn", "reinforce", "ppo", "a2c"])
@@ -131,6 +182,13 @@ def main() -> None:
     tr.add_argument("--cfg", action="append", default=[], metavar="KEY=VALUE",
                     help="override a hyperparameter, e.g. --cfg double_dqn=true --cfg eps_anneal_frames=100000")
 
+    sw = sub.add_parser("sweep", help="10 hyperparameter configurations per algorithm (parallel)")
+    sw.add_argument("--algos", default="dqn,reinforce,ppo,a2c")
+    sw.add_argument("--frames", type=int, default=None, help="budget per run (default: SWEEP_FRAMES = 300000)")
+    sw.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
+    sub.add_parser("analyze", help="rebuild tables, figures and models/best.json from logs/")
+    js = sub.add_parser("json", help="print one episode as JSON (state + action per step)")
+    js.add_argument("--algo", default="best", choices=["best", "dqn", "reinforce", "ppo", "a2c", "scripted", "random"])
     pl = sub.add_parser("play", help="replay an agent (live window or GIF)")
     pl.add_argument("--algo", default="best", choices=["best", "dqn", "reinforce", "ppo", "a2c", "scripted", "random"])
     pl.add_argument("--episodes", type=int, default=3)
@@ -142,8 +200,22 @@ def main() -> None:
     pl.add_argument("--snapshot", action="store_true", help="headless: also save assets/env_preview.png")
     a = ap.parse_args()
 
-    if a.cmd == "train":
+    if a.cmd is None:                                   # `uv run main.py`: results table + replay of the best agent
+        summary()
+        try:
+            play("best", 2, True)
+        except FileNotFoundError as e:
+            print(f"\n{e}")
+    elif a.cmd == "train":
         train(a.algo, a.frames, a.seed, a.run_id, a.cfg)
+    elif a.cmd == "sweep":
+        from training import SWEEP_FRAMES
+        sweep(tuple(a.algos.split(",")), a.frames or SWEEP_FRAMES, a.workers)
+    elif a.cmd == "analyze":
+        from training import analyze
+        analyze()
+    elif a.cmd == "json":
+        episode_json(a.algo)
     else:
         play(a.algo, a.episodes, a.headless, a.split, a.seed, a.fps, a.follow, a.snapshot)
 
