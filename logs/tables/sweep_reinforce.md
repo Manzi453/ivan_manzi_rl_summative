@@ -1,4 +1,4 @@
-### REINFORCE: 10 configurations (301,056 frames each, seed 0)
+### REINFORCE: 13 configurations (301,056 frames each, seed 0)
 
 | Run | Hyperparameters | Train return | Delivered (train) | Delivered (held-out) | Delivered (stress) | Frames to converge |
 |---|---|---|---|---|---|---|
@@ -10,5 +10,8 @@
 | cfg06 | lr=0.001, gamma=0.99, baseline=value, frames_per_batch=2048, entropy_coef=0.01, hidden=[64, 64] | -5.03 | 0% | 0% | 0% | never |
 | cfg07 | lr=0.001, gamma=0.99, baseline=batch_mean, frames_per_batch=512, entropy_coef=0.05, hidden=[64, 64] | -2.89 | 0% | 0% | 0% | never |
 | cfg08 | lr=0.003, gamma=0.99, baseline=batch_mean, frames_per_batch=512, entropy_coef=0.01, hidden=[64, 64] | -2.86 | 0% | 0% | 0% | never |
-| cfg09 **(best)** | lr=0.001, gamma=0.98, baseline=value, frames_per_batch=512, entropy_coef=0.01, hidden=[64, 64] | -1.81 | 0% | 0% | 0% | never |
+| cfg09 | lr=0.001, gamma=0.98, baseline=value, frames_per_batch=512, entropy_coef=0.01, hidden=[64, 64] | -1.81 | 0% | 0% | 0% | never |
 | cfg10 | lr=0.0005, gamma=0.99, baseline=value, frames_per_batch=2048, entropy_coef=0.02, hidden=[64, 64] | -4.94 | 0% | 0% | 0% | never |
+| cfg11 | lr=0.001, gamma=0.99, baseline=value, frames_per_batch=128, entropy_coef=0.01, hidden=[64, 64] | -1.82 | 0% | 0% | 0% | never |
+| cfg12 | lr=0.003, gamma=0.99, baseline=batch_mean, frames_per_batch=256, entropy_coef=0.01, hidden=[64, 64] | -4.67 | 0% | 0% | 0% | never |
+| cfg13 **(best)** | lr=0.001, gamma=0.98, baseline=value, frames_per_batch=256, entropy_coef=0.01, hidden=[64, 64] | -1.59 | 0% | 0% | 0% | never |

@@ -6,8 +6,8 @@
       "run": "cfg01"
     },
     "reinforce": {
-      "path": "models/pg/reinforce_cfg09.pt",
-      "run": "cfg09"
+      "path": "models/pg/reinforce_cfg13.pt",
+      "run": "cfg13"
     },
     "ppo": {
       "path": "models/pg/ppo_cfg06.pt",
